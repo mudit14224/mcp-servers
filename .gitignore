@@ -1,1 +1,6 @@
-mcp/
+# Ignore all build and node_modules folders recursively
+**/build/
+**/node_modules/
+
+# Ignore package-lock.json from all folders
+**/package-lock.json
