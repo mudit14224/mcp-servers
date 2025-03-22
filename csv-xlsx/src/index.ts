@@ -7,12 +7,14 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js"
 import * as XLSX from 'xlsx';
-import * as fs from 'fs'; // or import { ... } from 'fs'
+import * as fs from 'fs'; 
 import * as path from 'path';
 import { readFileSync } from 'fs';
 import Papa from 'papaparse';
 import { createCanvas } from 'canvas';
+import * as dfd from 'danfojs-node';
 import { Chart, ChartItem, registerables } from 'chart.js';
+import { Series } from "danfojs-node/dist/danfojs-base/index.js";
 
 Chart.register(...registerables); 
 
@@ -103,6 +105,21 @@ const PLOT_GRAPH_TOOL: Tool = {
             }
         },
         required: ["filePath", "graphType", "xColumn", "outputFileName"]
+    }
+}
+
+const DESCRIBE_DATA_TOOL: Tool = {
+    name: "describe_data",
+    description: "Describe the data of the file using danfojs",
+    inputSchema: {
+        type: "object",
+        properties: {
+            filePath: {
+                type: "string",
+                description: "The path of the file for which we want to describe the data"
+            }
+        },
+        required: ["filePath"]
     }
 }
 
@@ -365,12 +382,118 @@ async function plotGraph(
     }
 }
 
+// function to convert XLSX to JSON
+async function convertXlsxToJson(filePath: string): Promise<any[]> {
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found at: ${filePath}`);
+    }
+
+    const fileBuffer = fs.readFileSync(filePath);
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    return XLSX.utils.sheet_to_json(sheet);
+}
+
+// Describe Data function
+async function describeData(filePath: string): Promise<ToolResponseType> {
+    try {
+        const workDir = process.env.WORK_DIR; 
+        if (!workDir) {
+            throw new Error("Cannot find WORK_DIR environment variable")
+        }
+
+        const fullFilePath = path.join(workDir, filePath)
+
+        if (!fs.existsSync(fullFilePath)) {
+            throw new Error(`File not found at: ${filePath}`)
+        }
+
+        const data = readData(fullFilePath); 
+
+        if (!data || data.length === 0) {
+            throw new Error("Failed to read data from file.");
+        }
+
+        const dataframe = new dfd.DataFrame(data);
+        const descriptions: { numerical?: any; nonNumerical?: any } = {};
+
+        // Filter for numerical columns
+        const numericalColumns = dataframe.dtypes
+            .map((dtype, index) => ({ dtype, index }))
+            .filter(({ dtype }) => dtype !== 'string')
+            .map(({ index }) => dataframe.columns[index]);
+
+        if (numericalColumns.length > 0) {
+            const numericalDf = dataframe.loc( { columns: numericalColumns })
+            descriptions['numerical'] = dfd.toJSON(numericalDf.describe())
+        }
+        
+        // Filter for non-numerical columns
+        const nonNumericalColumns = dataframe.columns.filter(col => !numericalColumns.includes(col));
+
+        if (nonNumericalColumns.length > 0) {
+            const summary: Record<string, any> = {}
+
+            for (const col of nonNumericalColumns) {
+                const series: dfd.Series = dataframe[col]
+                const count = series.count()
+                const uniqueValues = series.unique()
+                const numUnique = uniqueValues.shape[0]
+                const valueCounts = series.valueCounts()
+                const sortedValueCounts = valueCounts.sortValues( {ascending: false} )
+
+                const categoryValueCounts: Record<string, number> = {}
+                const index = sortedValueCounts.index
+                const values = sortedValueCounts.values
+
+                for (let i = 0; i < index.length; i++) {
+                    categoryValueCounts[String(index[i])] = Number(values[i])
+                }
+
+                summary[col] = {
+                    count,          // number of non-missing entries
+                    numUnique,      // number of unique values
+                    categoryValueCounts // categories sorted with count
+                }
+            }
+            descriptions['nonNumerical'] = summary
+        }
+        return {
+            content: [{
+                type: "text",
+                text: JSON.stringify(descriptions, null, 2),
+            }],
+            isError: false,
+        };
+    } catch (error) {
+        let errorMessage = "An error occurred while describing the data.";
+
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        }
+
+        console.error("Error describing data:", error);
+
+        return {
+            content: [{
+                type: "text",
+                text: `Error: ${errorMessage}`,
+            }],
+            isError: true,
+        };
+    }
+}
+
 // Define an immutable list of tools
 const CSV_TOOLS = [
     WORK_DIR_TOOL,
     SET_WORK_DIR_TOOL,
     READ_FILE_TOOL,
     PLOT_GRAPH_TOOL, 
+    DESCRIBE_DATA_TOOL, 
 ] as const
 
 // Server Setup
@@ -410,9 +533,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (request.params.name === "plot_graph") {
             const { filePath, graphType, xColumn, yColumn, outputFileName } = request.params.arguments as { filePath: string, graphType: string, xColumn: string, yColumn: string | null, outputFileName: string }
             return await plotGraph(filePath, graphType, xColumn, yColumn, outputFileName)
-            
         }
 
+        if (request.params.name == 'describe_data') {
+            const { filePath } = request.params.arguments as { filePath: string }
+            return await describeData(filePath)
+        }
         return {
             content: [
                 {
