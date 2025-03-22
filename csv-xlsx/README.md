@@ -30,6 +30,22 @@ This repository provides a set of tools designed to integrate seamlessly with th
     - `outputFileName`: A string specifying the name of the output image file to save the graph.
 - **Usage**: This tool processes the specified file, extracts the relevant data, and generates a graph saved as an image file in the working directory. It supports various graph types, including line, bar, pie, and more.
 
+### 5. `describeData`
+**Description**: Provides a summary of both numerical and non-numerical columns in a CSV or XLSX file.
+
+- **Input**:
+  - `filePath`: A string representing the relative path to the CSV or XLSX file within the working directory.
+
+- **Output**: 
+  - Returns a structured summary in JSON format including:
+    - **Numerical Columns**: Statistical metrics such as mean, standard deviation, min, max, and quartiles.
+    - **Non-Numerical Columns**: 
+      - Count of non-missing entries (`count`)
+      - Number of unique values (`numUnique`)
+      - A frequency distribution of categorical values sorted by count (`categoryValueCounts`)
+
+- **Usage**:  This tool is useful for quickly understanding the structure and distribution of data within a file. It supports preprocessing steps like exploratory data analysis by distinguishing between numerical and categorical features.
+
 ## Future Developments
 
 I am actively working on expanding the toolset to include additional functionalities that enhance data processing and visualization capabilities within the MCP ecosystem. 
