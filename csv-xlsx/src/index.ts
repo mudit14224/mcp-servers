@@ -526,6 +526,7 @@ async function pearsonCorrelation(x: number[], y: number[]): Promise<number> {
 
     return numerator / Math.sqrt(denomX * denomY);
 }
+
 async function computeCorrelationMatrix(df: dfd.DataFrame): Promise<dfd.DataFrame> {
     const cols = df.columns;
     const result: number[][] = [];
