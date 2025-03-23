@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import Papa from 'papaparse';
 import { createCanvas } from 'canvas';
 import * as dfd from 'danfojs-node';
-import { Chart, ChartItem, registerables } from 'chart.js';
+import { Chart, registerables } from 'chart.js';
 import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
 
 Chart.register(...registerables, MatrixController, MatrixElement); 
@@ -142,7 +142,48 @@ const CORR_MATRIX: Tool = {
     }
 }
 
-
+const HANDLE_NULL_TOOL: Tool = {
+    name: "handle_null_values",
+    description: "Handle null values in a CSV file",
+    inputSchema: {
+        type: "object",
+        properties: {
+            filePath: {
+                type: "string",
+                description: "The path of the CSV file to process."
+            },
+            strategy: {
+                oneOf: [
+                    {
+                        type: "string",
+                        description: "The strategy to use for handling null values.",
+                        enum: [
+                            "remove",
+                            "mean",
+                            "median",
+                            "mode",
+                            "ffill",
+                            "bfill",
+                        ],
+                    },
+                    {
+                        type: "string",
+                        description: "A constant value to fill nulls with (e.g., 'constant:0').",
+                        pattern: "^constant:\\d+(\\.\\d+)?$", 
+                    },
+                ],
+            },
+            columns: {
+                type: "array",
+                items: {
+                    type: "string",
+                },
+                description: "List of columns to apply the strategy to.",
+            },
+        },
+        required: ["filePath", "strategy", "columns"],
+    },
+}
 
 // Functions
 function getWorkDir(): string {
@@ -657,6 +698,130 @@ async function generateCorrelationMatrix(filePath: string, plot: boolean): Promi
     }
 }
 
+// Helper functions for handle null values
+function forwardFill(df: dfd.DataFrame, col: string) {
+    const colData = df[col].values
+    let lastValid = null
+
+    for (let i=0; i < colData.length; i++) {
+        if (colData[i] !== null && colData[i] !== undefined && !Number.isNaN(colData[i])) {
+            lastValid = colData[i]
+        } else if (lastValid !== null) {
+            colData[i] = lastValid
+        }
+    }
+    df.addColumn(col, colData, { inplace: true });
+}
+
+function backwardFill(df: dfd.DataFrame, col: string) {
+    const colData = df[col].values;
+    let nextValid = null;
+
+    for (let i = colData.length - 1; i >= 0; i--) {
+        if (colData[i] !== null && colData[i] !== undefined && !Number.isNaN(colData[i])) {
+            nextValid = colData[i];
+        } else if (nextValid !== null) {
+            colData[i] = nextValid;
+        }
+    }
+
+    df.addColumn(col, colData, { inplace: true });
+}
+
+// Function to handle null Values
+async function handleNullValues(filePath: string, strategy: string, columns: string[]): Promise<ToolResponseType> {
+    try {
+        const workDir = process.env.WORK_DIR;
+        if (!workDir) throw new Error("Cannot find WORK_DIR environment variable.");
+
+        const fullFilePath = path.join(workDir, filePath);
+        if (!fs.existsSync(fullFilePath)) {
+            throw new Error(`File not found at: ${filePath}`);
+        }
+
+        const data = readData(fullFilePath); 
+        if (!data || data.length === 0) {
+            throw new Error("Failed to read data from file.");
+        }
+
+        const dataFrame = new dfd.DataFrame(data);
+        const selectedColumns = (columns && columns.length > 0) ? columns : dataFrame.columns;
+        for (const col of selectedColumns) {
+            if (!dataFrame.columns.includes(col)) {
+                return {
+                    content: [{ type: "text", text: `Error: Column '${col}' not found in the DataFrame.` }],
+                    isError: true,
+                };
+            }
+            const series = dataFrame[col];
+
+            switch (strategy) {
+                case 'remove':
+                    dataFrame.dropNa({ axis: 0, inplace: true, subset: [col] } as any);
+                    break;
+                case 'mean':
+                    dataFrame.fillNa(series.mean(), { columns: [col], inplace: true });
+                    break;
+                case 'median':
+                    dataFrame.fillNa(series.median(), { columns: [col], inplace: true });
+                    break;
+                case 'mode':
+                    const modeVal = series.mode()[0];
+                    dataFrame.fillNa(modeVal, { columns: [col], inplace: true });
+                    break;
+                case 'ffill':
+                    forwardFill(dataFrame, col);
+                    break;
+                case 'bfill':
+                    backwardFill(dataFrame, col);
+                    break;
+                default:
+                    if (strategy.startsWith('constant:')) {
+                        const constantValue = strategy.split(':')[1];
+                        dataFrame.fillNa(constantValue, { columns: [col], inplace: true });
+                    } else {
+                        return {
+                            content: [{ type: "text", text: `Error: Invalid strategy '${strategy}'.` }],
+                            isError: true,
+                        };
+                    }
+            }
+        }
+        const fileName = path.basename(filePath);
+        const fileExt = path.extname(fileName); 
+        const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+        const outputFileName = `${fileNameWithoutExt}_modified${fileExt}`;
+        const outputFilePath = path.join(workDir, outputFileName);
+
+        if (fileExt === '.csv') {
+            const outputCsv = dfd.toCSV(dataFrame);
+            if (!outputCsv) {
+                throw new Error("Failed to generate CSV from DataFrame.");
+            }
+            fs.writeFileSync(outputFilePath, outputCsv);
+        } else if (fileExt === '.xlsx') {
+            dataFrame.toExcel({ filePath: outputFilePath });
+        } else {
+            throw new Error("Unsupported file format. Only .csv and .xlsx are supported.");
+        }
+        return {
+            content: [{
+                type: "text",
+                text: `The modified file has been saved as: ${outputFileName}`,
+            }],
+            isError: false,
+        };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("Error handling null values:", error);
+
+        return {
+            content: [{ type: "text", text: `Error: ${errorMessage}` }],
+            isError: true,
+        };
+    }
+}
+
 // Define an immutable list of tools
 const CSV_TOOLS = [
     WORK_DIR_TOOL,
@@ -665,6 +830,7 @@ const CSV_TOOLS = [
     PLOT_GRAPH_TOOL, 
     DESCRIBE_DATA_TOOL, 
     CORR_MATRIX,
+    HANDLE_NULL_TOOL,
 ] as const
 
 // Server Setup
@@ -706,15 +872,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             return await plotGraph(filePath, graphType, xColumn, yColumn, outputFileName)
         }
 
-        if (request.params.name == 'describe_data') {
+        if (request.params.name === 'describe_data') {
             const { filePath } = request.params.arguments as { filePath: string }
             return await describeData(filePath)
         }
 
-        if (request.params.name == 'correlation_matrix')  {
+        if (request.params.name === 'correlation_matrix')  {
             const { filePath, plot } = request.params.arguments as { filePath: string, plot: boolean | void }
             const effectivePlot = plot ?? false;
             return await generateCorrelationMatrix(filePath, effectivePlot)
+        }
+
+        if (request.params.name === 'handle_null_values') {
+            const { filePath, strategy, columns } = request.params.arguments as { filePath: string, strategy: string, columns: string[] }
+            return await handleNullValues(filePath, strategy, columns)
         }
         return {
             content: [
