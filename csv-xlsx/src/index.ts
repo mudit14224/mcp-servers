@@ -476,7 +476,23 @@ async function describeData(filePath: string): Promise<ToolResponseType> {
         }
 
         const dataframe = new dfd.DataFrame(data);
-        const descriptions: { numerical?: any; nonNumerical?: any } = {};
+        const descriptions: { numerical?: Record<string, any>; nonNumerical?: Record<string, any>; nullCounts?: Record<string, number> } = {};
+
+        // Calculate Null counts for each column
+        const nullCounts: Record<string, number> = {};
+        for (const col of dataframe.columns) {
+            const series = dataframe[col]
+            let nullCount = 0
+
+            for (const val of series.values) {
+                if (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) {
+                    nullCount++;
+                }
+            }
+            nullCounts[col] = nullCount
+        }
+
+        descriptions['nullCounts'] = nullCounts;
 
         // Filter for numerical columns
         const numericalColumns = dataframe.dtypes
@@ -485,8 +501,33 @@ async function describeData(filePath: string): Promise<ToolResponseType> {
             .map(({ index }) => dataframe.columns[index]);
 
         if (numericalColumns.length > 0) {
-            const numericalDf = dataframe.loc( { columns: numericalColumns })
-            descriptions['numerical'] = dfd.toJSON(numericalDf.describe())
+            const numericalSummary: Record<string, any> = {};
+
+            for (const col of numericalColumns) {
+                const series = dataframe[col];
+            
+                // Filter out null/undefined/NaN
+                const cleanedValues = series.values.filter((v: any) => 
+                    v !== null && v !== undefined && !(typeof v === 'number' && isNaN(v)));
+            
+                // Skip if all values were null
+                if (cleanedValues.length === 0) {
+                    numericalSummary[col] = { message: 'All values are null or invalid' };
+                    continue;
+                }
+            
+                const cleanSeries = new dfd.Series(cleanedValues);
+            
+                numericalSummary[col] = {
+                    count: cleanSeries.count(),
+                    mean: cleanSeries.mean(),
+                    std: cleanSeries.std(),
+                    min: cleanSeries.min(),
+                    max: cleanSeries.max(),
+                    median: cleanSeries.median(),
+                };
+            }
+            descriptions['numerical'] = numericalSummary;
         }
         
         // Filter for non-numerical columns
@@ -497,10 +538,13 @@ async function describeData(filePath: string): Promise<ToolResponseType> {
 
             for (const col of nonNumericalColumns) {
                 const series: dfd.Series = dataframe[col]
-                const count = series.count()
-                const uniqueValues = series.unique()
+                // Filter out null values for clean stats
+                const nonNullValues = series.values.filter(v => v !== null && v !== undefined && !(typeof v === 'number' && isNaN(v)));
+                const cleanSeries = new dfd.Series(nonNullValues);
+                const count = cleanSeries.count()
+                const uniqueValues = cleanSeries.unique()
                 const numUnique = uniqueValues.shape[0]
-                const valueCounts = series.valueCounts()
+                const valueCounts = cleanSeries.valueCounts()
                 const sortedValueCounts = valueCounts.sortValues( {ascending: false} )
 
                 const categoryValueCounts: Record<string, number> = {}
