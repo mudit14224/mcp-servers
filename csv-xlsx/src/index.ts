@@ -14,9 +14,9 @@ import Papa from 'papaparse';
 import { createCanvas } from 'canvas';
 import * as dfd from 'danfojs-node';
 import { Chart, ChartItem, registerables } from 'chart.js';
-import { Series } from "danfojs-node/dist/danfojs-base/index.js";
+import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
 
-Chart.register(...registerables); 
+Chart.register(...registerables, MatrixController, MatrixElement); 
 
 
 // Response Types
@@ -117,6 +117,25 @@ const DESCRIBE_DATA_TOOL: Tool = {
             filePath: {
                 type: "string",
                 description: "The path of the file for which we want to describe the data"
+            }
+        },
+        required: ["filePath"]
+    }
+}
+
+const CORR_MATRIX: Tool = {
+    name: "correlation_matrix", 
+    description: "Get the correlation matrix of the numerical columns for a file",
+    inputSchema: {
+        type: "object", 
+        properties: {
+            filePath: {
+                type: "string", 
+                description: "The path of the file for which we want the correlation matrix"
+            }, 
+            plot: {
+                type: "boolean",
+                description: "Whether the user wants to save the correlation plot offline."
             }
         },
         required: ["filePath"]
@@ -487,6 +506,156 @@ async function describeData(filePath: string): Promise<ToolResponseType> {
     }
 }
 
+// Helper functions for Correlation matrix
+async function pearsonCorrelation(x: number[], y: number[]): Promise<number> {
+    const n = x.length;
+    const meanX = x.reduce((a, b) => a + b) / n;
+    const meanY = y.reduce((a, b) => a + b) / n;
+
+    let numerator = 0;
+    let denomX = 0;
+    let denomY = 0;
+
+    for (let i = 0; i < n; i++) {
+        const dx = x[i] - meanX;
+        const dy = y[i] - meanY;
+        numerator += dx * dy;
+        denomX += dx * dx;
+        denomY += dy * dy;
+    }
+
+    return numerator / Math.sqrt(denomX * denomY);
+}
+async function computeCorrelationMatrix(df: dfd.DataFrame): Promise<dfd.DataFrame> {
+    const cols = df.columns;
+    const result: number[][] = [];
+
+    for (let i = 0; i < cols.length; i++) {
+        result[i] = [];
+        const col1 = df[cols[i]].values as number[];
+        for (let j = 0; j < cols.length; j++) {
+            const col2 = df[cols[j]].values as number[];
+            const corr = await pearsonCorrelation(col1, col2);  // Await inside loop (OK for small data)
+            result[i][j] = corr;
+        }
+    }
+
+    return new dfd.DataFrame(result, { columns: cols, index: cols });
+}
+
+
+// Get Correlation matrix function
+async function generateCorrelationMatrix(filePath: string, plot: boolean): Promise<ToolResponseType> {
+    try {
+        const workDir = process.env.WORK_DIR;
+        if (!workDir) {
+            throw new Error("Cannot find WORK_DIR environment variable");
+        }
+
+        const fullFilePath = path.join(workDir, filePath);
+
+        if (!fs.existsSync(fullFilePath)) {
+            throw new Error(`File not found at: ${filePath}`);
+        }
+
+        const data = readData(fullFilePath); 
+
+        if (!data || data.length === 0) {
+            throw new Error("Failed to read data from file.");
+        }
+
+        const dataframe = new dfd.DataFrame(data);
+
+        // Filter numerical columns
+        const numericalColumns = dataframe.dtypes
+            .map((dtype, index) => ({ dtype, index }))
+            .filter(({ dtype }) => dtype !== 'string')
+            .map(({ index }) => dataframe.columns[index]);
+
+        const numericalDf = new dfd.DataFrame(dataframe.loc({ columns: numericalColumns }).values, {
+            columns: numericalColumns,
+        });
+
+        const correlationMatrix = await computeCorrelationMatrix(numericalDf);
+        const correlationJson = correlationMatrix.toJSON();
+
+        if (plot) {
+            const canvas = createCanvas(800, 600);
+            const ctx = canvas.getContext('2d');
+
+            const labels = numericalColumns;
+            const dataValues = correlationMatrix.values as number[][];
+
+            new Chart(ctx as any, {
+                type: 'matrix', 
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: dataValues.flatMap((row: number[], rowIndex: number) =>
+                            row.map((value, colIndex) => ({
+                                x: labels[colIndex],
+                                y: labels[rowIndex],
+                                value: value,
+                            }))
+                        ),
+                        backgroundColor: (context: any) => {
+                            const value = context.dataset.data[context.dataIndex].value;
+                            const alpha = (value + 1) / 2;
+                            return `rgba(0, 0, 255, ${alpha})`;
+                        },
+                    }],
+                },
+                options: {
+                    scales: {
+                        x: { type: 'category' },
+                        y: { type: 'category' },
+                    },
+                    plugins: {
+                        legend: { display: false },
+                    },
+                },
+            });
+
+            const graphsFolderPath = path.join(workDir, 'claude-graphs');
+            if (!fs.existsSync(graphsFolderPath)) {
+                fs.mkdirSync(graphsFolderPath, { recursive: true });
+            }
+
+            const fileName = path.basename(filePath);
+            const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+            const outputFileName = `${fileNameWithoutExt}_corr.png`;
+            const outputFilePath = path.join(graphsFolderPath, outputFileName);
+
+            const buffer = canvas.toBuffer('image/png');
+            fs.writeFileSync(outputFilePath, buffer);
+
+            return {
+                content: [{
+                    type: "text",
+                    text: `Correlation matrix plot saved to: ${outputFileName}`,
+                }],
+                isError: false,
+            };
+        } else {
+            return {
+                content: [{
+                    type: "text",
+                    text: JSON.stringify(correlationJson, null, 2),
+                }],
+                isError: false,
+            };
+        }
+    } catch (error) {
+        return {
+            content: [{
+                type: "text",
+                text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            }],
+            isError: true,
+        };
+    }
+}
+
 // Define an immutable list of tools
 const CSV_TOOLS = [
     WORK_DIR_TOOL,
@@ -494,6 +663,7 @@ const CSV_TOOLS = [
     READ_FILE_TOOL,
     PLOT_GRAPH_TOOL, 
     DESCRIBE_DATA_TOOL, 
+    CORR_MATRIX,
 ] as const
 
 // Server Setup
@@ -538,6 +708,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (request.params.name == 'describe_data') {
             const { filePath } = request.params.arguments as { filePath: string }
             return await describeData(filePath)
+        }
+
+        if (request.params.name == 'correlation_matrix')  {
+            const { filePath, plot } = request.params.arguments as { filePath: string, plot: boolean | void }
+            const effectivePlot = plot ?? false;
+            return await generateCorrelationMatrix(filePath, effectivePlot)
         }
         return {
             content: [
