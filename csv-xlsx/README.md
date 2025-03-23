@@ -46,6 +46,22 @@ This repository provides a set of tools designed to integrate seamlessly with th
 
 - **Usage**:  This tool is useful for quickly understanding the structure and distribution of data within a file. It supports preprocessing steps like exploratory data analysis by distinguishing between numerical and categorical features.
 
+### 6. `generateCorrelationMatrix`
+**Description**: Computes the correlation matrix for numerical columns in a CSV or XLSX file and optionally generates a heatmap-style plot.
+
+- **Input**:
+  - `filePath`: A string representing the relative path to the CSV or XLSX file within the working directory.
+  - `plot`: A boolean indicating whether to generate and save a visual correlation matrix plot (`true`) or return the correlation matrix as JSON (`false`).
+
+- **Output**:
+  - If `plot` is `false`: Returns the correlation matrix as a JSON object representing pairwise correlations between all numerical columns.
+  - If `plot` is `true`: Saves a PNG heatmap of the correlation matrix to the `claude-graphs` folder in the working directory and returns the image filename.
+
+- **Usage**:
+  - Useful for identifying relationships and multicollinearity between numerical features.
+  - Enables visual data exploration by generating a correlation heatmap plot.
+  - Can support downstream tasks like feature selection and model diagnostics.
+
 ## Future Developments
 
 I am actively working on expanding the toolset to include additional functionalities that enhance data processing and visualization capabilities within the MCP ecosystem. 
