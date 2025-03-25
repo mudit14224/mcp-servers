@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import * as fs from 'fs'; 
 import * as dfd from 'danfojs-node';
+import * as path from 'path';
+import { ToolResponseType } from '../types.js';
 
 // Helper function for reading Data
 export function readData(filePath: string): any[] {
@@ -66,3 +68,51 @@ export async function convertXlsxToJson(filePath: string): Promise<any[]> {
     return XLSX.utils.sheet_to_json(sheet);
 }
 
+// Helper function to save dataframe to a file
+export async function saveDataToFile(dataFrame: dfd.DataFrame, fullFilePath: string): Promise<ToolResponseType> {
+    try {
+        const fileName = path.basename(fullFilePath);
+        const fileExt = path.extname(fileName);
+        const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+        const outputFileName = `${fileNameWithoutExt}_modified${fileExt}`;
+        const outputFilePath = path.join(path.dirname(fullFilePath), outputFileName); //Save to same directory
+
+        if (fileExt === '.csv') {
+            const outputCsv = dfd.toCSV(dataFrame);
+            if (!outputCsv) {
+                throw new Error("Failed to generate CSV from DataFrame.");
+            }
+            fs.writeFileSync(outputFilePath, outputCsv);
+        } else if (fileExt === '.xlsx') {
+            await dataFrame.toExcel({ filePath: outputFilePath }); //toExcel is async
+        } else {
+            throw new Error("Unsupported file format. Only .csv and .xlsx are supported.");
+        }
+
+        return {
+            content: [{
+                type: "text",
+                text: `Data saved to ${outputFileName}`,
+            }],
+            isError: false,
+        };
+    } catch (error) {
+        let errorMessage = "An error occurred while saving the data.";
+
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        }
+
+        console.error("Error saving data:", error);
+
+        return {
+            content: [{
+                type: "text",
+                text: `Error: ${errorMessage}`,
+            }],
+            isError: true,
+        };
+    }
+}

@@ -156,6 +156,28 @@ export const HANDLE_NULL_TOOL: Tool = {
     },
 }
 
+export const DROP_COLUMNS: Tool = {
+    name: "drop_columns",
+    description: "Drop columns from a dataframe", 
+    inputSchema: {
+        type: "object", 
+        properties: {
+            filePath: {
+                type: "string", 
+                description: "The path of the file from which we want to drop the columns"
+            }, 
+            columns: {
+                type: "array",
+                items: {
+                    type: "string"
+                },
+                description: "List of columns to drop."
+            },
+        },
+        required: ["filePath", "columns"]
+    }
+}
+
 export const CSV_TOOLS = [
     WORK_DIR_TOOL,
     SET_WORK_DIR_TOOL,
@@ -164,4 +186,5 @@ export const CSV_TOOLS = [
     DESCRIBE_DATA_TOOL,
     CORR_MATRIX,
     HANDLE_NULL_TOOL,
+    DROP_COLUMNS,
 ] as const;

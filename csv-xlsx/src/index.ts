@@ -14,7 +14,8 @@ import {
     setWorkDir,
     readFile,
     plotGraph,
-    handleNullValues
+    handleNullValues,
+    dropColumns
 } from "./tools/index.js";
 
 // Server Setup
@@ -70,6 +71,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (request.params.name === 'handle_null_values') {
             const { filePath, strategy, columns } = request.params.arguments as { filePath: string, strategy: string, columns: string[] }
             return await handleNullValues(filePath, strategy, columns)
+        }
+
+        if (request.params.name === 'drop_columns') {
+            const { filePath, columns } = request.params.arguments as { filePath: string, columns: string[] }
+            return await dropColumns(filePath, columns)
         }
         return {
             content: [
