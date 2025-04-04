@@ -178,6 +178,28 @@ export const DROP_COLUMNS: Tool = {
     }
 }
 
+export const RENAME_COLUMNS: Tool = {
+    name: "rename_columns",
+    description: "Rename columns in a dataframe",
+    inputSchema: {
+        type: "object", 
+        properties: {
+            filePath: {
+                type: "string",
+                description: "The path of the file from which we want to rename the columns"
+            },
+            columnMapping: {
+                type: "object",
+                description: "A mapping of old column names to new column names.",
+                additionalProperties: {
+                    type: "string"
+                },
+            },
+        },
+        required: ["filePath", "columnMapping"],
+    }
+}
+
 export const CSV_TOOLS = [
     WORK_DIR_TOOL,
     SET_WORK_DIR_TOOL,
@@ -187,4 +209,5 @@ export const CSV_TOOLS = [
     CORR_MATRIX,
     HANDLE_NULL_TOOL,
     DROP_COLUMNS,
+    RENAME_COLUMNS, 
 ] as const;

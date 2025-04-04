@@ -15,7 +15,8 @@ import {
     readFile,
     plotGraph,
     handleNullValues,
-    dropColumns
+    dropColumns,
+    renameColumns
 } from "./tools/index.js";
 
 // Server Setup
@@ -76,6 +77,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (request.params.name === 'drop_columns') {
             const { filePath, columns } = request.params.arguments as { filePath: string, columns: string[] }
             return await dropColumns(filePath, columns)
+        }
+
+        if (request.params.name == 'rename_columns') {
+            const { filePath, columnMapping } = request.params.arguments as { filePath: string, columnMapping: { [oldName: string]: string } };
+            return await renameColumns(filePath, columnMapping)
         }
         return {
             content: [
