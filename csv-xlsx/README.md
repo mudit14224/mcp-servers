@@ -62,6 +62,48 @@ This repository provides a set of tools designed to integrate seamlessly with th
   - Enables visual data exploration by generating a correlation heatmap plot.
   - Can support downstream tasks like feature selection and model diagnostics.
 
+ ### 7. `selectColumns`
+**Description**: Creates a new file containing only the specified columns from the input CSV or XLSX file.
+
+- **Input**:
+  - `filePath`: A string representing the relative path to the CSV or XLSX file.
+  - `columns`: An array of column names to retain in the output file.
+
+- **Output**:
+  - Saves a new version of the file in the working directory, containing only the selected columns.
+
+- **Usage**:
+  - Useful for narrowing down data to relevant features for analysis or model input.
+  - Helps in data preprocessing by focusing only on necessary attributes.
+
+### 8. `dropColumns`
+**Description**: Drops the specified columns from the input CSV or XLSX file and saves the updated file.
+
+- **Input**:
+  - `filePath`: A string representing the relative path to the CSV or XLSX file.
+  - `columns`: An array of column names to remove from the file.
+
+- **Output**:
+  - Saves a new version of the file in the working directory without the dropped columns.
+
+- **Usage**:
+  - Useful for cleaning datasets by removing irrelevant or redundant columns.
+  - Supports data preparation for analysis and modeling by reducing noise in the dataset.
+
+### 9. `renameColumns`
+**Description**: Renames columns in the input CSV or XLSX file based on a provided mapping of old names to new names.
+
+- **Input**:
+  - `filePath`: A string representing the relative path to the CSV or XLSX file.
+  - `columnMapping`: An object where keys are existing column names and values are the new column names.
+
+- **Output**:
+  - Saves a new version of the file in the working directory with updated column names.
+
+- **Usage**:
+  - Useful for standardizing column names to meet schema requirements.
+  - Supports better readability and consistency in datasets, especially when integrating with external systems.
+
 ## Future Developments
 
 I am actively working on expanding the toolset to include additional functionalities that enhance data processing and visualization capabilities within the MCP ecosystem. 
