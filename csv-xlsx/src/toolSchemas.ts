@@ -153,10 +153,10 @@ export const HANDLE_NULL_TOOL: Tool = {
             },
         },
         required: ["filePath", "strategy", "columns"],
-    },
+    }
 }
 
-export const DROP_COLUMNS: Tool = {
+export const DROP_COLUMNS_TOOL: Tool = {
     name: "drop_columns",
     description: "Drop columns from a dataframe", 
     inputSchema: {
@@ -178,7 +178,7 @@ export const DROP_COLUMNS: Tool = {
     }
 }
 
-export const RENAME_COLUMNS: Tool = {
+export const RENAME_COLUMNS_TOOL: Tool = {
     name: "rename_columns",
     description: "Rename columns in a dataframe",
     inputSchema: {
@@ -200,6 +200,28 @@ export const RENAME_COLUMNS: Tool = {
     }
 }
 
+export const SELECT_COLUMNS_TOOL: Tool = {
+    name: "select_columns",
+    description: "Select only the specified columns from the dataset.", 
+    inputSchema: {
+        type: "object", 
+        properties: {
+            filePath: {
+                type: "string",
+                description: "The path of the file from which we want to select the columns"
+            },
+            columns: {
+                type: "array",
+                items: {
+                    type: "string"
+                },
+                description: "List of columns to select."
+            },
+        },
+        required: ["filePath", "columns"]
+    }
+}
+
 export const CSV_TOOLS = [
     WORK_DIR_TOOL,
     SET_WORK_DIR_TOOL,
@@ -208,6 +230,7 @@ export const CSV_TOOLS = [
     DESCRIBE_DATA_TOOL,
     CORR_MATRIX,
     HANDLE_NULL_TOOL,
-    DROP_COLUMNS,
-    RENAME_COLUMNS, 
+    DROP_COLUMNS_TOOL,
+    RENAME_COLUMNS_TOOL, 
+    SELECT_COLUMNS_TOOL,
 ] as const;

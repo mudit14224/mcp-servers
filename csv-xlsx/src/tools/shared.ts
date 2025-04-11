@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import * as fs from 'fs'; 
-import * as dfd from 'danfojs-node';
+import * as dfd from "danfojs-node";
 import * as path from 'path';
 import { ToolResponseType } from '../types.js';
 
@@ -73,8 +73,14 @@ export async function saveDataToFile(dataFrame: dfd.DataFrame, fullFilePath: str
     try {
         const fileName = path.basename(fullFilePath);
         const fileExt = path.extname(fileName);
-        const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
-        const outputFileName = `${fileNameWithoutExt}_modified${fileExt}`;
+        let fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+        
+        // check if file already ends with _modified
+        if (!fileNameWithoutExt.endsWith('_modified')) {
+            fileNameWithoutExt += '_modified';
+        }
+
+        const outputFileName = `${fileNameWithoutExt}${fileExt}`;
         const outputFilePath = path.join(path.dirname(fullFilePath), outputFileName); //Save to same directory
 
         if (fileExt === '.csv') {

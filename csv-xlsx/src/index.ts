@@ -16,7 +16,8 @@ import {
     plotGraph,
     handleNullValues,
     dropColumns,
-    renameColumns
+    renameColumns,
+    selectColumns
 } from "./tools/index.js";
 
 // Server Setup
@@ -82,6 +83,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (request.params.name == 'rename_columns') {
             const { filePath, columnMapping } = request.params.arguments as { filePath: string, columnMapping: { [oldName: string]: string } };
             return await renameColumns(filePath, columnMapping)
+        }
+
+        if (request.params.name === 'select_columns') {
+            const { filePath, columns } = request.params.arguments as { filePath: string, columns: string[] }
+            return await selectColumns(filePath, columns)
         }
         return {
             content: [
